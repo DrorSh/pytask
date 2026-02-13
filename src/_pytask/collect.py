@@ -52,6 +52,7 @@ from _pytask.shared import unwrap_task_function
 from _pytask.task_utils import COLLECTED_TASKS
 from _pytask.task_utils import parse_collected_tasks_with_task_marker
 from _pytask.task_utils import task as task_decorator
+from _pytask.typing import TaskFunction
 from _pytask.typing import is_task_function
 
 if TYPE_CHECKING:
@@ -89,7 +90,21 @@ def pytask_collect(session: Session) -> bool:
         session=session, reports=session.collection_reports, tasks=session.tasks
     )
 
+    _clear_annotation_locals(session.tasks)
+
     return True
+
+
+def _clear_annotation_locals(tasks: list[PTask]) -> None:
+    """Drop decoration-time locals snapshots once collection finishes.
+
+    The snapshot is only needed to evaluate deferred annotations while collecting
+    dependencies/products. Keeping it afterwards can retain non-picklable objects (for
+    example locks) and break parallel backends that cloudpickle task functions.
+    """
+    for task in tasks:
+        if isinstance(task.function, TaskFunction):
+            task.function.pytask_meta.annotation_locals = None
 
 
 def _collect_from_paths(session: Session) -> None:
@@ -115,7 +130,7 @@ def _collect_from_tasks(session: Session) -> None:
 
     for raw_task in to_list(session.config.get("tasks", ())):
         if is_task_function(raw_task):
-            if not hasattr(raw_task, "pytask_meta"):
+            if not isinstance(raw_task, TaskFunction):
                 raw_task = task_decorator()(raw_task)  # noqa: PLW2901
 
             path = get_file(raw_task)
@@ -339,7 +354,7 @@ def pytask_collect_task(
 
         markers = get_all_marks(obj)
 
-        if hasattr(obj, "pytask_meta"):
+        if isinstance(obj, TaskFunction):
             attributes = {
                 **obj.pytask_meta.attributes,
                 "collection_id": obj.pytask_meta._id,

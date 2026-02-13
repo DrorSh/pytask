@@ -66,7 +66,6 @@ from _pytask.outcomes import count_outcomes
 from _pytask.pluginmanager import get_plugin_manager
 from _pytask.pluginmanager import hookimpl
 from _pytask.pluginmanager import storage
-from _pytask.profile import Runtime
 from _pytask.reports import CollectionReport
 from _pytask.reports import DagReport
 from _pytask.reports import ExecutionReport
@@ -74,6 +73,7 @@ from _pytask.session import Session
 from _pytask.task_utils import task
 from _pytask.traceback import Traceback
 from _pytask.typing import Product
+from _pytask.typing import TaskFunction
 from _pytask.typing import is_task_function
 from _pytask.warnings_utils import WarningReport
 from _pytask.warnings_utils import parse_warning_filter
@@ -122,7 +122,6 @@ __all__ = [
     "PytaskError",
     "PythonNode",
     "ResolvingDependenciesError",
-    "Runtime",
     "Session",
     "ShowCapture",
     "Skipped",
@@ -131,6 +130,7 @@ __all__ = [
     "State",
     "Task",
     "TaskExecutionStatus",
+    "TaskFunction",
     "TaskOutcome",
     "TaskWithoutPath",
     "Traceback",

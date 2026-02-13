@@ -12,6 +12,7 @@ from pytask import PathNode
 from pytask import Task
 from pytask import build
 from pytask import cli
+from tests.conftest import noop
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Hashes match only on unix.")
@@ -20,8 +21,8 @@ def test_create_dag():
     task = Task(
         base_name="task_dummy",
         path=root,
-        function=None,
-        depends_on={
+        function=noop,
+        depends_on={  # type: ignore[arg-type]
             0: PathNode.from_path(root / "node_1"),
             1: PathNode.from_path(root / "node_2"),
         },
@@ -51,7 +52,7 @@ def test_cycle_in_dag(tmp_path, runner, snapshot_cli):
     result = runner.invoke(cli, [tmp_path.as_posix()])
 
     assert result.exit_code == ExitCode.DAG_FAILED
-    if sys.platform == "linux":
+    if sys.platform != "win32":
         assert result.output == snapshot_cli()
 
 
@@ -70,7 +71,7 @@ def test_two_tasks_have_the_same_product(tmp_path, runner, snapshot_cli):
     result = runner.invoke(cli, [tmp_path.as_posix()])
 
     assert result.exit_code == ExitCode.DAG_FAILED
-    if sys.platform == "linux":
+    if sys.platform != "win32":
         assert result.output == snapshot_cli()
 
 

@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import inspect
+from dataclasses import replace
 from typing import TYPE_CHECKING
 from typing import Annotated
 from typing import Any
 from typing import get_origin
-
-import attrs
 
 from _pytask._inspect import get_annotations
 from _pytask.exceptions import NodeNotCollectedError
@@ -21,6 +20,7 @@ from _pytask.tree_util import PyTree
 from _pytask.tree_util import tree_leaves
 from _pytask.tree_util import tree_map_with_path
 from _pytask.typing import ProductType
+from _pytask.typing import TaskFunction
 from _pytask.typing import no_default
 
 if TYPE_CHECKING:
@@ -57,7 +57,7 @@ def parse_dependencies_from_task_function(
     """Parse dependencies from task function."""
     dependencies = {}
 
-    task_kwargs = obj.pytask_meta.kwargs if hasattr(obj, "pytask_meta") else {}
+    task_kwargs = obj.pytask_meta.kwargs if isinstance(obj, TaskFunction) else {}
     signature_defaults = parse_keyword_arguments_from_signature_defaults(obj)
     kwargs = {**signature_defaults, **task_kwargs}
     kwargs.pop("produces", None)
@@ -111,7 +111,7 @@ def parse_dependencies_from_task_function(
             )
             dependencies[parameter_name] = PythonNode(value=value, name=node_name)
         else:
-            dependencies[parameter_name] = nodes  # type: ignore[assignment]
+            dependencies[parameter_name] = nodes
     return dependencies
 
 
@@ -174,7 +174,7 @@ def parse_products_from_task_function(
 
     out: dict[str, Any] = {}
 
-    task_kwargs = obj.pytask_meta.kwargs if hasattr(obj, "pytask_meta") else {}
+    task_kwargs = obj.pytask_meta.kwargs if isinstance(obj, TaskFunction) else {}
     signature_defaults = parse_keyword_arguments_from_signature_defaults(obj)
     kwargs = {**signature_defaults, **task_kwargs}
 
@@ -226,7 +226,7 @@ def parse_products_from_task_function(
             )
             out[parameter_name] = collected_products
 
-    task_produces = obj.pytask_meta.produces if hasattr(obj, "pytask_meta") else None
+    task_produces = obj.pytask_meta.produces if isinstance(obj, TaskFunction) else None
     if task_produces:
         has_task_decorator = True
         collected_products = _collect_nodes_and_provisional_nodes(
@@ -307,7 +307,7 @@ def collect_dependency(
         # If a node is a dependency and its value is not set, the node is a product in
         # another task and the value will be set there. Thus, we wrap the original node
         # in another node to retrieve the value after it is set.
-        new_node = attrs.evolve(node, value=node)
+        new_node = replace(node, value=node)
         node_info = node_info._replace(value=new_node)
 
     collected_node = session.hook.pytask_collect_node(
@@ -357,6 +357,6 @@ def create_name_of_python_node(node_info: NodeInfo) -> str:
     """Create name of PythonNode."""
     node_name = node_info.task_name + "::" + node_info.arg_name
     if node_info.path:
-        suffix = "-".join(map(str, node_info.path))
+        suffix = "-".join(str(p) for p in node_info.path)
         node_name += "::" + suffix
     return node_name

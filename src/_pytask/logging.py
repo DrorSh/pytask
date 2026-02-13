@@ -68,6 +68,7 @@ def pytask_log_session_header(session: Session) -> None:
         f"Platform: {sys.platform} -- Python {platform.python_version()}, "
         f"pytask {_pytask.__version__}, pluggy {pluggy.__version__}",
         highlight=False,
+        soft_wrap=True,
     )
     console.print(f"Root: {session.config['root']}")
     if session.config["config"] is not None:
@@ -137,7 +138,7 @@ def _format_duration(duration: float) -> str:
             i for i in duration_tuples if i[1] not in ("second", "seconds")
         ]
 
-    return ", ".join([" ".join(map(str, i)) for i in duration_tuples])
+    return ", ".join([" ".join(str(x) for x in i) for i in duration_tuples])
 
 
 def _humanize_time(  # noqa: C901, PLR0912

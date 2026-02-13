@@ -5,6 +5,41 @@ chronological order. Releases follow [semantic versioning](https://semver.org/) 
 releases are available on [PyPI](https://pypi.org/project/pytask) and
 [Anaconda.org](https://anaconda.org/conda-forge/pytask).
 
+## Unreleased
+
+- {pull}`744` Removed the direct dependency on attrs and migrated internal models to
+  dataclasses.
+- {pull}`766` moves runtime profiling persistence from SQLite to a JSON snapshot plus
+  append-only journal in `.pytask/`, keeping runtime data resilient to crashes and
+  compacted on normal build exits.
+- {pull}`776` clears decoration-time `annotation_locals` snapshots after collection so
+  task functions remain picklable in process-based parallel backends.
+
+## 0.5.8 - 2025-12-30
+
+- {pull}`710` adds support for Python 3.14.
+- {pull}`724` handles lazy annotations for task generators in Python 3.14.
+- {pull}`725` fixes the pickle node hash test by accounting for Python 3.14's
+  default pickle protocol.
+- {pull}`726` adapts the interactive debugger integration to Python 3.14's
+  updated `pdb` behaviour and keeps pytest-style capturing intact.
+- {pull}`732` fixes importing packages with missing `__init__.py` files.
+- {pull}`739` closes file descriptors for the capture manager between CLI runs and
+  disposes stale database engines to prevent hitting OS file descriptor limits in
+  large test runs.
+- {pull}`734` migrates from mypy to ty for type checking.
+- {pull}`736` updates the comparison to other tools documentation and adds a section on
+  the Common Workflow Language (CWL) and WorkflowHub.
+- {pull}`730` updates GitHub Actions dependencies.
+- {pull}`731` enables automerge for pre-commit and Dependabot.
+- {pull}`733` and {pull}`727` refresh pre-commit hooks.
+- {pull}`737` enables merge groups.
+
+## 0.5.7 - 2025-11-22
+
+- {pull}`721` clarifies the documentation on repeated tasks in notebooks.
+- {pull}`723` fixes an issue with defaults for click options. Thanks to {user}`DrorSh` for contributing the fix!
+
 ## 0.5.6 - 2025-10-31
 
 - {pull}`703` fixes {issue}`701` by allowing `--capture tee-sys` again.
@@ -12,7 +47,8 @@ releases are available on [PyPI](https://pypi.org/project/pytask) and
 - {pull}`706` disables syntax highlighting for platform version information in session header.
 - {pull}`707` drops support for Python 3.9 as it has reached end of life.
 - {pull}`708` updates mypy and fixes type issues.
-- {pull}`709` add uv pre-commit check.
+- {pull}`709` adds uv pre-commit check.
+- {pull}`710` adds support for Python 3.14.
 - {pull}`713` removes uv as a test dependency. Closes {issue}`712`. Thanks to {user}`erooke`!
 - {pull}`718` fixes {issue}`717` by properly parsing the `pdbcls` configuration option from config files. Thanks to {user}`MImmesberger` for the report!
 - {pull}`719` fixes repeated tasks with the same function name in the programmatic interface to ensure all tasks execute correctly.

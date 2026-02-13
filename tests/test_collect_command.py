@@ -3,10 +3,10 @@ from __future__ import annotations
 import pickle
 import sys
 import textwrap
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-from attrs import define
 
 from _pytask.collect_command import _find_common_ancestor_of_all_nodes
 from _pytask.collect_command import _print_collected_tasks
@@ -304,9 +304,9 @@ def test_collect_task_with_ignore_from_cli(runner, tmp_path):
     assert "out_1.txt>" in captured
 
 
-@define
+@dataclass
 class Node:
-    path: Path
+    path: str
 
     def state(self): ...
 
@@ -321,8 +321,8 @@ def test_print_collected_tasks_without_nodes(capsys):
                 base_name="function",
                 path=Path("task_path.py"),
                 function=function,
-                depends_on={0: Node("in.txt")},
-                produces={0: Node("out.txt")},
+                depends_on={"depends_on": Node("in.txt")},
+                produces={"produces": Node("out.txt")},
             )
         ]
     }
@@ -344,7 +344,7 @@ def test_print_collected_tasks_with_nodes(capsys):
                 path=Path("task_path.py"),
                 function=function,
                 depends_on={"depends_on": PathNode(name="in.txt", path=Path("in.txt"))},
-                produces={0: PathNode(name="out.txt", path=Path("out.txt"))},
+                produces={"produces": PathNode(name="out.txt", path=Path("out.txt"))},
             )
         ]
     }
@@ -370,7 +370,7 @@ def test_find_common_ancestor_of_all_nodes(show_nodes, expected_add):
                 "depends_on": PathNode.from_path(Path.cwd() / "src" / "in.txt")
             },
             produces={
-                0: PathNode.from_path(
+                "produces": PathNode.from_path(
                     Path.cwd().joinpath("..", "bld", "out.txt").resolve()
                 )
             },
@@ -469,10 +469,10 @@ def test_node_protocol_for_custom_nodes(runner, tmp_path):
     source = """
     from typing import Annotated
     from pytask import Product
-    from attrs import define
+    from dataclasses import dataclass
     from pathlib import Path
 
-    @define
+    @dataclass
     class CustomNode:
         name: str
         value: str
@@ -503,15 +503,16 @@ def test_node_protocol_for_custom_nodes_with_paths(runner, tmp_path):
     from typing import Any
     from pytask import Product
     from pathlib import Path
-    from attrs import define
+    from dataclasses import dataclass
+    from dataclasses import field
     import pickle
 
-    @define
+    @dataclass
     class PickleFile:
         name: str
         path: Path
         signature: str = "id"
-        attributes: dict[Any, Any] = {}
+        attributes: dict[Any, Any] = field(default_factory=dict)
 
         def state(self):
             return str(self.path.stat().st_mtime)

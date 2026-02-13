@@ -6,6 +6,7 @@ import enum
 import sys
 from pathlib import Path
 from typing import Any
+from typing import cast
 
 import click
 import networkx as nx
@@ -15,8 +16,7 @@ from _pytask.click import ColoredCommand
 from _pytask.click import EnumChoice
 from _pytask.compat import check_for_optional_program
 from _pytask.compat import import_optional_dependency
-from _pytask.config_utils import find_project_root_and_config
-from _pytask.config_utils import read_config
+from _pytask.config_utils import normalize_programmatic_config
 from _pytask.console import console
 from _pytask.dag import create_dag
 from _pytask.exceptions import CollectionError
@@ -27,9 +27,7 @@ from _pytask.pluginmanager import get_plugin_manager
 from _pytask.pluginmanager import hookimpl
 from _pytask.pluginmanager import storage
 from _pytask.session import Session
-from _pytask.shared import parse_paths
 from _pytask.shared import reduce_names_of_multiple_nodes
-from _pytask.shared import to_list
 from _pytask.traceback import Traceback
 
 
@@ -149,43 +147,23 @@ def build_dag(raw_config: dict[str, Any]) -> nx.DiGraph:
 
         # If someone called the programmatic interface, we need to do some parsing.
         if "command" not in raw_config:
-            raw_config["command"] = "dag"
             # Add defaults from cli.
             from _pytask.cli import DEFAULTS_FROM_CLI  # noqa: PLC0415
 
-            raw_config = {**DEFAULTS_FROM_CLI, **raw_config}
-
-            raw_config["paths"] = parse_paths(raw_config["paths"])
-
-            if raw_config["config"] is not None:
-                raw_config["config"] = Path(raw_config["config"]).resolve()
-                raw_config["root"] = raw_config["config"].parent
-            else:
-                (
-                    raw_config["root"],
-                    raw_config["config"],
-                ) = find_project_root_and_config(raw_config["paths"])
-
-            if raw_config["config"] is not None:
-                config_from_file = read_config(raw_config["config"])
-
-                if "paths" in config_from_file:
-                    paths = config_from_file["paths"]
-                    paths = [
-                        raw_config["config"].parent.joinpath(path).resolve()
-                        for path in to_list(paths)
-                    ]
-                    config_from_file["paths"] = paths
-
-                raw_config = {**raw_config, **config_from_file}
+            raw_config = normalize_programmatic_config(
+                raw_config,
+                command="dag",
+                defaults_from_cli=cast("dict[str, Any]", DEFAULTS_FROM_CLI),
+            )
 
         config = pm.hook.pytask_configure(pm=pm, raw_config=raw_config)
 
         session = Session.from_config(config)
 
-    except (ConfigurationError, Exception):  # noqa: BLE001  # pragma: no cover
+    except (ConfigurationError, Exception) as e:  # pragma: no cover
         console.print_exception()
-        session = Session(exit_code=ExitCode.CONFIGURATION_FAILED)
+        msg = "Failed to configure session for dag."
+        raise ConfigurationError(msg) from e
 
     else:
         session.hook.pytask_log_session_header(session=session)

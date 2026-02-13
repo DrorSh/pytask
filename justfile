@@ -10,21 +10,13 @@ test *FLAGS:
 test-cov *FLAGS:
     uv run --group test pytest --nbmake --cov=src --cov=tests --cov-report=xml -n auto {{FLAGS}}
 
-# Run tests with notebook validation
-test-nb:
-    uv run --group test pytest --nbmake -n auto
-
 # Run type checking
 typing:
-    uv run --group typing --no-dev --isolated mypy
-
-# Run type checking on notebooks
-typing-nb:
-    uv run --group typing --no-dev --isolated nbqa mypy --ignore-missing-imports .
+    uv run --group typing --group test --isolated ty check
 
 # Run linting
 lint:
-    uvx --with pre-commit-uv pre-commit run -a
+    uvx prek run -a
 
 # Run all checks (format, lint, typing, test)
 check: lint typing test
@@ -43,4 +35,4 @@ test-lowest:
 
 # Run tests with highest dependency resolution (like CI)
 test-highest:
-    uv run --python 3.13 --group test --resolution highest pytest --nbmake -n auto
+    uv run --python 3.14 --group test --resolution highest pytest --nbmake -n auto

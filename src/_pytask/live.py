@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from dataclasses import field
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import NamedTuple
 
 import click
-from attrs import define
-from attrs import field
 from rich.box import ROUNDED
 from rich.errors import LiveError
 from rich.live import Live
@@ -33,6 +32,9 @@ if TYPE_CHECKING:
     from _pytask.reports import CollectionReport
     from _pytask.reports import ExecutionReport
     from _pytask.session import Session
+
+
+_LIVE_DISPLAY_OWNER: LiveManager | None = None
 
 
 @hookimpl
@@ -85,7 +87,7 @@ def pytask_execute(session: Session) -> Generator[None, None, None]:
     return (yield)
 
 
-@define(eq=False)
+@dataclass(eq=False)
 class LiveManager:
     """A class for live displays during a session.
 
@@ -106,10 +108,24 @@ class LiveManager:
     """
 
     _live: Live = field(
-        factory=lambda: Live(renderable=None, console=console, auto_refresh=False)
+        default_factory=lambda: Live(
+            renderable=None, console=console, auto_refresh=False
+        )
     )
 
     def start(self) -> None:
+        global _LIVE_DISPLAY_OWNER  # noqa: PLW0603
+        if _LIVE_DISPLAY_OWNER is not None and _LIVE_DISPLAY_OWNER is not self:
+            msg = (
+                "pytask tried to launch a second live display which is impossible. The "
+                "issue occurs when you use pytask on the command line on a task module "
+                "that uses the programmatic interface of pytask at the same time. "
+                "Use either the command line or the programmatic interface."
+            )
+            raise Exit(msg)
+        if self._live.is_started:
+            _LIVE_DISPLAY_OWNER = self
+            return
         try:
             self._live.start()
         except LiveError:
@@ -120,11 +136,15 @@ class LiveManager:
                 "Use either the command line or the programmatic interface."
             )
             raise Exit(msg) from None
+        _LIVE_DISPLAY_OWNER = self
 
     def stop(self, transient: bool | None = None) -> None:
+        global _LIVE_DISPLAY_OWNER  # noqa: PLW0603
         if transient is not None:
             self._live.transient = transient
         self._live.stop()
+        if _LIVE_DISPLAY_OWNER is self:
+            _LIVE_DISPLAY_OWNER = None
 
     def pause(self) -> None:
         self._live.transient = True
@@ -157,7 +177,7 @@ class _ReportEntry(NamedTuple):
     task: PTask
 
 
-@define(eq=False, kw_only=True)
+@dataclass(eq=False, kw_only=True)
 class LiveExecution:
     """A class for managing the table displaying task progress during the execution."""
 
@@ -168,8 +188,8 @@ class LiveExecution:
     initial_status: TaskExecutionStatus = TaskExecutionStatus.RUNNING
     sort_final_table: bool = False
     n_tasks: int | str = "x"
-    _reports: list[_ReportEntry] = field(factory=list)
-    _running_tasks: dict[str, _TaskEntry] = field(factory=dict)
+    _reports: list[_ReportEntry] = field(default_factory=list)
+    _running_tasks: dict[str, _TaskEntry] = field(default_factory=dict)
 
     @hookimpl(wrapper=True)
     def pytask_execute_build(self) -> Generator[None, None, None]:
@@ -306,7 +326,7 @@ class LiveExecution:
         self._update_table()
 
 
-@define(eq=False, kw_only=True)
+@dataclass(eq=False, kw_only=True)
 class LiveCollection:
     """A class for managing the live status during the collection."""
 

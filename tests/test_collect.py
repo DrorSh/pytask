@@ -5,6 +5,7 @@ import textwrap
 import warnings
 from pathlib import Path
 
+import cloudpickle
 import pytest
 
 from _pytask.collect import _find_shortest_uniquely_identifiable_name_for_tasks
@@ -16,6 +17,7 @@ from pytask import Session
 from pytask import Task
 from pytask import build
 from pytask import cli
+from tests.conftest import noop
 
 
 @pytest.mark.parametrize(
@@ -143,7 +145,7 @@ def test_error_with_invalid_file_name_pattern(runner, tmp_path):
 
 
 def test_error_with_invalid_file_name_pattern_(tmp_path):
-    session = build(paths=tmp_path, task_files=[1])
+    session = build(paths=tmp_path, task_files=[1])  # type: ignore[arg-type]
     assert session.exit_code == ExitCode.CONFIGURATION_FAILED
 
 
@@ -248,7 +250,9 @@ def test_find_shortest_uniquely_identifiable_names_for_tasks(tmp_path):
 
     for base_name in ("base_name_ident_0", "base_name_ident_1"):
         task = Task(
-            base_name=base_name, path=path_identifiable_by_base_name, function=None
+            base_name=base_name,
+            path=path_identifiable_by_base_name,
+            function=noop,
         )
         tasks.append(task)
         expected[task.name] = "t.py::" + base_name
@@ -258,7 +262,7 @@ def test_find_shortest_uniquely_identifiable_names_for_tasks(tmp_path):
 
     for module in ("t.py", "m.py"):
         module_path = dir_identifiable_by_module_name / module
-        task = Task(base_name="task_a", path=module_path, function=None)
+        task = Task(base_name="task_a", path=module_path, function=noop)
         tasks.append(task)
         expected[task.name] = module + "::task_a"
 
@@ -270,7 +274,7 @@ def test_find_shortest_uniquely_identifiable_names_for_tasks(tmp_path):
 
     for base_path in (dir_identifiable_by_folder_a, dir_identifiable_by_folder_b):
         module_path = base_path / "t.py"
-        task = Task(base_name="task_t", path=module_path, function=None)
+        task = Task(base_name="task_t", path=module_path, function=noop)
         tasks.append(task)
         expected[task.name] = base_path.name + "/t.py::task_t"
 
@@ -292,7 +296,9 @@ def test_collect_dependencies_from_args_if_depends_on_is_missing(tmp_path):
 
     assert session.exit_code == ExitCode.OK
     assert len(session.tasks) == 1
-    assert session.tasks[0].depends_on["path_in"].path == tmp_path.joinpath("in.txt")
+    depends_on = session.tasks[0].depends_on
+    assert depends_on is not None
+    assert depends_on["path_in"].path == tmp_path.joinpath("in.txt")  # type: ignore[union-attr]
 
 
 def test_collect_tasks_from_modules_with_the_same_name(tmp_path):
@@ -307,9 +313,13 @@ def test_collect_tasks_from_modules_with_the_same_name(tmp_path):
         report.outcome == CollectionOutcome.SUCCESS
         for report in session.collection_reports
     )
-    assert {
-        report.node.function.__module__ for report in session.collection_reports
-    } == {"a.task_module", "b.task_module"}
+    modules = set()
+    for report in session.collection_reports:
+        node = report.node
+        assert node is not None
+        assert node.function is not None  # type: ignore[union-attr]
+        modules.add(node.function.__module__)  # type: ignore[union-attr]
+    assert modules == {"a.task_module", "b.task_module"}
 
 
 def test_collect_module_name(tmp_path):
@@ -331,6 +341,94 @@ def test_collect_module_name(tmp_path):
     session = build(paths=tmp_path)
     outcome = session.collection_reports[0].outcome
     assert outcome == CollectionOutcome.SUCCESS
+
+
+def test_lazy_annotations_capture_loop_locals(tmp_path):
+    source = """
+    from pathlib import Path
+    from typing import Annotated
+    from pytask import task
+
+    for i in range(2):
+        path = Path(f"out-{i}.txt")
+
+        @task
+        def task_example() -> Annotated[str, path]:
+            return "Hello"
+    """
+    tmp_path.joinpath("task_module.py").write_text(textwrap.dedent(source))
+
+    session = build(paths=tmp_path)
+    assert session.exit_code == ExitCode.OK
+    assert tmp_path.joinpath("out-0.txt").exists()
+    assert tmp_path.joinpath("out-1.txt").exists()
+
+
+def test_lazy_annotations_use_current_globals(tmp_path):
+    source = """
+    from __future__ import annotations
+
+    from pathlib import Path
+    from typing import Annotated
+
+    OUTPUT = Path("first.txt")
+
+    def task_example() -> Annotated[str, OUTPUT]:
+        return "Hello"
+
+    OUTPUT = Path("second.txt")
+    """
+    tmp_path.joinpath("task_module.py").write_text(textwrap.dedent(source))
+
+    session = build(paths=tmp_path)
+    assert session.exit_code == ExitCode.OK
+    assert tmp_path.joinpath("second.txt").exists()
+    assert not tmp_path.joinpath("first.txt").exists()
+
+
+def test_string_literal_annotations_are_resolved(tmp_path):
+    source = """
+    from __future__ import annotations
+
+    from pathlib import Path
+    from typing import Annotated
+
+    OUTPUT = Path("out.txt")
+
+    def task_example() -> 'Annotated[str, OUTPUT]':
+        return "Hello"
+    """
+    tmp_path.joinpath("task_module.py").write_text(textwrap.dedent(source))
+
+    session = build(paths=tmp_path)
+    assert session.exit_code == ExitCode.OK
+    assert tmp_path.joinpath("out.txt").exists()
+
+
+def test_annotation_locals_are_cleared_after_collection_to_allow_pickling(tmp_path):
+    source = """
+    import threading
+
+    from pytask import task
+
+    lock = threading.RLock()
+
+    for i in range(2):
+        @task
+        def task_example():
+            return None
+    """
+    tmp_path.joinpath("task_module.py").write_text(textwrap.dedent(source))
+
+    session = build(paths=tmp_path, dry_run=True)
+    assert session.exit_code == ExitCode.OK
+    assert len(session.tasks) == 2
+
+    for collected_task in session.tasks:
+        meta = getattr(collected_task.function, "pytask_meta", None)
+        assert meta is not None
+        assert meta.annotation_locals is None
+        cloudpickle.dumps(collected_task.function)
 
 
 def test_collect_string_product_raises_error_with_annotation(runner, tmp_path):
@@ -362,8 +460,10 @@ def test_setting_name_for_path_node_via_annotation(tmp_path):
 
     session = build(paths=tmp_path)
     assert session.exit_code == ExitCode.OK
-    product = session.tasks[0].produces["path"]
-    assert product.name == "product"
+    produces = session.tasks[0].produces
+    assert produces is not None
+    product = produces["path"]
+    assert product.name == "product"  # type: ignore[union-attr]
 
 
 def test_error_when_dependency_is_defined_in_kwargs_and_annotation(runner, tmp_path):
@@ -485,7 +585,9 @@ def test_default_name_of_path_nodes(tmp_path, node):
     session = build(paths=tmp_path)
     assert session.exit_code == ExitCode.OK
     assert tmp_path.joinpath("file.txt").exists()
-    assert session.tasks[0].produces["return"].name == tmp_path.name + "/file.txt"
+    produces = session.tasks[0].produces
+    assert produces is not None
+    assert produces["return"].name == tmp_path.name + "/file.txt"  # type: ignore[union-attr]
 
 
 def test_error_when_return_annotation_cannot_be_parsed(runner, tmp_path):
